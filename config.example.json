@@ -1,0 +1,39 @@
+{
+  "products": [
+    {
+      "id": "product_1",
+      "name": "Premium Role",
+      "description": "Get premium role for 30 days",
+      "price": 10000,
+      "currency": "IDR",
+      "type": "role",
+      "metadata": {
+        "roleId": "1234567890",
+        "duration": 2592000000
+      }
+    },
+    {
+      "id": "product_2",
+      "name": "VIP Access",
+      "description": "VIP channel access for 30 days",
+      "price": 25000,
+      "currency": "IDR",
+      "type": "access",
+      "metadata": {
+        "channelIds": ["1234567891", "1234567892"],
+        "duration": 2592000000
+      }
+    }
+  ],
+  "paymentGateway": {
+    "mock": {
+      "enabled": true,
+      "autoConfirmDelay": 5000
+    }
+  },
+  "app": {
+    "name": "Discord Store Bot",
+    "version": "1.0.0",
+    "supportUrl": "https://discord.gg/your-server"
+  }
+}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> - Store</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .order-box { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 30px; text-align: center; }
+        .product-info { margin-bottom: 30px; }
+        .product-info h2 { color: #2c3e50; margin-bottom: 10px; }
+        .product-info p { color: #666; margin-bottom: 10px; }
+        .product-price { font-size: 32px; font-weight: bold; color: #27ae60; margin: 20px 0; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #333; font-weight: bold; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .submit-btn { background: #27ae60; color: white; border: none; padding: 15px 30px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; }
+        .submit-btn:hover { background: #229954; }
+        .submit-btn:disabled { background: #95a5a6; cursor: not-allowed; }
+        .back-link { display: inline-block; margin-bottom: 20px; color: #3498db; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .message { padding: 15px; border-radius: 4px; margin-bottom: 20px; display: none; }
+        .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/store/products" class="back-link">← Back to Products</a>
+        <div class="order-box">
+            <h1>🛒 <%= title %></h1>
+            <div id="message" class="message"></div>
+            <div class="product-info">
+                <h2><%= product.name %></h2>
+                <p><%= product.description %></p>
+                <div class="product-price"><%= product.price %> <%= product.currency %></div>
+            </div>
+            <form id="orderForm">
+                <input type="hidden" name="productId" value="<%= product.id %>">
+                <div class="form-group">
+                    <label for="userId">User ID:</label>
+                    <input type="text" id="userId" name="userId" required placeholder="Enter your user ID">
+                </div>
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required placeholder="Enter your username">
+                </div>
+                <button type="submit" class="submit-btn" id="submitBtn">Place Order</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        document.getElementById('orderForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const message = document.getElementById('message');
+            
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+            message.style.display = 'none';
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch('/store/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    message.className = 'message success';
+                    message.textContent = 'Order created successfully! Redirecting to payment...';
+                    message.style.display = 'block';
+                    
+                    if (result.data.paymentLink) {
+                        setTimeout(() => {
+                            window.location.href = '/store/status?orderId=' + result.data.orderId;
+                        }, 2000);
+                    }
+                } else {
+                    message.className = 'message error';
+                    message.textContent = 'Error: ' + result.error;
+                    message.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'Place Order';
+                }
+            } catch (error) {
+                message.className = 'message error';
+                message.textContent = 'Network error. Please try again.';
+                message.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Place Order';
+            }
+        });
+    </script>
+</body>
+</html>
