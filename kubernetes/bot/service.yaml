@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bot-service
+  namespace: default
+  labels:
+    app: discord-store-bot
+    tier: application
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  selector:
+    app: discord-store-bot
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP

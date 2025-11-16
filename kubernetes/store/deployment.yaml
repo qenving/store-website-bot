@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: store-deployment
+  namespace: default
+  labels:
+    app: discord-store-website
+    tier: frontend
+    component: store
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: discord-store-website
+  template:
+    metadata:
+      labels:
+        app: discord-store-website
+        tier: frontend
+        component: store
+    spec:
+      serviceAccountName: discord-store-sa
+      containers:
+      - name: store
+        image: ghcr.io/qenving/store-website-bot/store:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: STORE_PORT
+          value: "3000"
+        - name: API_URL
+          value: "http://api-service:3001"
+        - name: GATEWAY_URL
+          value: "http://gateway-service:3002"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 40
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+      - name: ghcr-secret

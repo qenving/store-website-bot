@@ -1,0 +1,407 @@
+name: Nightly Build & Test Pipeline
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Every night at 2:00 AM UTC
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  full-test-suite:
+    name: Run Full Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: discord_store_test
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+      mongodb:
+        image: mongo:7
+        options: >-
+          --health-cmd="mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 27017:27017
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run all unit tests
+        run: npm run test:unit:all
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: discord_store_test
+          MONGO_URI: mongodb://localhost:27017/discord_store_test
+          NODE_ENV: test
+
+      - name: Run all integration tests
+        run: npm run test:integration:all
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: discord_store_test
+          MONGO_URI: mongodb://localhost:27017/discord_store_test
+          NODE_ENV: test
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: discord_store_test
+          MONGO_URI: mongodb://localhost:27017/discord_store_test
+          NODE_ENV: test
+
+      - name: Generate comprehensive coverage
+        run: npm run test:coverage:full
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: discord_store_test
+          MONGO_URI: mongodb://localhost:27017/discord_store_test
+          NODE_ENV: test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/coverage-final.json
+          flags: nightly
+          name: nightly-coverage
+
+  reconciliation-dry-run:
+    name: Reconciliation System Dry Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build reconciliation engine
+        run: npm run build:worker
+
+      - name: Run reconciliation dry run
+        run: npm run reconcile:dryrun
+        env:
+          DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          DB_PORT: ${{ secrets.STAGING_DB_PORT }}
+          DB_USER: ${{ secrets.STAGING_DB_USER }}
+          DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+          DB_NAME: ${{ secrets.STAGING_DB_NAME }}
+          DRY_RUN: true
+          LOG_LEVEL: debug
+
+      - name: Analyze reconciliation results
+        run: npm run reconcile:analyze
+
+      - name: Upload reconciliation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconciliation-report
+          path: reports/reconciliation-*.json
+
+  gateway-stress-test:
+    name: Gateway Health & Stress Test
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build gateway
+        run: npm run build:gateway
+
+      - name: Start gateway server
+        run: npm run gateway:start &
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          GATEWAY_PORT: 3002
+          NODE_ENV: test
+
+      - name: Wait for gateway startup
+        run: sleep 10
+
+      - name: Run gateway health check
+        run: npm run test:gateway:health
+
+      - name: Run connection stress test
+        run: npm run test:gateway:stress
+        env:
+          CONCURRENT_CONNECTIONS: 1000
+          TEST_DURATION: 300
+          RAMP_UP_TIME: 60
+
+      - name: Check gateway metrics
+        run: npm run gateway:metrics
+
+      - name: Upload stress test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-stress-results
+          path: reports/gateway-stress-*.json
+
+  performance-baseline:
+    name: Regenerate Performance Baselines
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: discord_store_test
+        ports:
+          - 3306:3306
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all services
+        run: npm run build
+
+      - name: Run performance benchmarks
+        run: npm run benchmark:all
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: test_password
+          DB_NAME: discord_store_test
+
+      - name: Generate baseline metrics
+        run: npm run metrics:baseline
+
+      - name: Commit baseline updates
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add performance-baselines/
+          git commit -m "chore: update performance baselines [nightly]" || echo "No baseline changes"
+          git push
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-baseline
+          path: performance-baselines/
+
+  docker-build-test:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, bot, worker, store, gateway]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build ${{ matrix.service }}
+        run: npm run build:${{ matrix.service }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and test Docker image
+        run: |
+          docker build -f docker/${{ matrix.service }}.Dockerfile -t test-${{ matrix.service }}:nightly .
+          docker run --rm test-${{ matrix.service }}:nightly node --version
+          docker run --rm test-${{ matrix.service }}:nightly npm --version
+
+      - name: Check image size
+        run: |
+          SIZE=$(docker images test-${{ matrix.service }}:nightly --format "{{.Size}}")
+          echo "Image size for ${{ matrix.service }}: $SIZE"
+
+  security-audit:
+    name: Nightly Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level=low --json > audit-results.json
+        continue-on-error: true
+
+      - name: Analyze audit results
+        run: npm run audit:analyze
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit
+          path: audit-results.json
+
+  dependency-updates:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Check for updates
+        run: npx npm-check-updates --format json > dependency-updates.json
+        continue-on-error: true
+
+      - name: Upload update report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-updates
+          path: dependency-updates.json
+
+  notify-results:
+    name: Send Nightly Report to Discord
+    runs-on: ubuntu-latest
+    needs: [full-test-suite, reconciliation-dry-run, gateway-stress-test, performance-baseline, docker-build-test, security-audit, dependency-updates]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: nightly-reports/
+
+      - name: Generate nightly summary
+        run: |
+          cat > nightly-summary.md << EOF
+          # Nightly Build Report
+          Date: $(date +%Y-%m-%d)
+
+          ## Test Results
+          - Full Test Suite: ${{ needs.full-test-suite.result }}
+          - Reconciliation Dry Run: ${{ needs.reconciliation-dry-run.result }}
+          - Gateway Stress Test: ${{ needs.gateway-stress-test.result }}
+          - Performance Baseline: ${{ needs.performance-baseline.result }}
+          - Docker Build Test: ${{ needs.docker-build-test.result }}
+          - Security Audit: ${{ needs.security-audit.result }}
+          - Dependency Updates: ${{ needs.dependency-updates.result }}
+
+          ## Links
+          - Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Coverage Report: https://codecov.io/gh/${{ github.repository }}
+          EOF
+
+      - name: Send Discord notification
+        run: npm run notify:nightly
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          NIGHTLY_SUMMARY: nightly-summary.md
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

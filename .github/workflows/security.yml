@@ -1,0 +1,288 @@
+name: Security Scanning Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Check for .env files
+        run: |
+          if find . -name ".env" -o -name ".env.*" | grep -v ".env.example"; then
+            echo "Error: Found .env files in repository!"
+            exit 1
+          fi
+
+      - name: Check for private keys
+        run: |
+          if find . -name "*.pem" -o -name "*.key" -o -name "id_rsa*" | grep -v "public"; then
+            echo "Error: Found private key files in repository!"
+            exit 1
+          fi
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'discord-store-bot'
+          path: '.'
+          format: 'HTML'
+          args: >
+            --enableRetired
+            --enableExperimental
+
+      - name: Upload Dependency Check results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/
+
+  code-security-scan:
+    name: Code Security Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint security plugin
+        run: npm run lint:security
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript,typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+
+  container-scan:
+    name: Container Image Scanning
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, bot, worker, store, gateway]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/${{ matrix.service }}.Dockerfile
+          push: false
+          load: true
+          tags: discord-store-bot/${{ matrix.service }}:scan
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: discord-store-bot/${{ matrix.service }}:scan
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: discord-store-bot/${{ matrix.service }}:scan
+          fail-build: false
+          severity-cutoff: high
+
+  license-compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check licenses
+        run: npx license-checker --production --onlyAllow "MIT;Apache-2.0;ISC;BSD-2-Clause;BSD-3-Clause;0BSD" --summary
+
+      - name: Generate license report
+        run: npx license-checker --production --json > licenses.json
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+
+  infrastructure-scan:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Checkov on Kubernetes manifests
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: kubernetes/
+          framework: kubernetes
+          output_format: cli,sarif
+          output_file_path: console,checkov-k8s.sarif
+
+      - name: Run Checkov on Dockerfiles
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: docker/
+          framework: dockerfile
+          output_format: cli,sarif
+          output_file_path: console,checkov-docker.sarif
+
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: checkov-k8s.sarif
+
+  environment-validation:
+    name: Environment Variable Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate environment schema
+        run: npm run validate:env:schema
+
+      - name: Check for hardcoded secrets
+        run: |
+          if grep -r -E "(password|secret|key|token)\s*=\s*['\"]" src/ --exclude-dir=node_modules; then
+            echo "Error: Found hardcoded secrets in code!"
+            exit 1
+          fi
+
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [secret-scan, dependency-scan, code-security-scan, container-scan, license-compliance, infrastructure-scan, environment-validation]
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports/
+
+      - name: Generate consolidated report
+        run: |
+          echo "# Security Scan Report" > security-summary.md
+          echo "Generated: $(date)" >> security-summary.md
+          echo "" >> security-summary.md
+          echo "## Scan Results" >> security-summary.md
+          echo "- Secret Scan: ${{ needs.secret-scan.result }}" >> security-summary.md
+          echo "- Dependency Scan: ${{ needs.dependency-scan.result }}" >> security-summary.md
+          echo "- Code Security: ${{ needs.code-security-scan.result }}" >> security-summary.md
+          echo "- Container Scan: ${{ needs.container-scan.result }}" >> security-summary.md
+          echo "- License Compliance: ${{ needs.license-compliance.result }}" >> security-summary.md
+          echo "- Infrastructure Scan: ${{ needs.infrastructure-scan.result }}" >> security-summary.md
+          echo "- Environment Validation: ${{ needs.environment-validation.result }}" >> security-summary.md
+
+      - name: Upload security summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: security-summary.md
+
+      - name: Notify security team
+        if: failure()
+        run: npm run notify:security
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_SECURITY_WEBHOOK_URL }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

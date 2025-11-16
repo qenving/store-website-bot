@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-deployment
+  namespace: default
+  labels:
+    app: discord-store-gateway
+    tier: backend
+    component: gateway
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: discord-store-gateway
+  template:
+    metadata:
+      labels:
+        app: discord-store-gateway
+        tier: backend
+        component: gateway
+    spec:
+      serviceAccountName: discord-store-sa
+      containers:
+      - name: gateway
+        image: ghcr.io/qenving/store-website-bot/gateway:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3002
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: GATEWAY_PORT
+          value: "3002"
+        - name: GATEWAY_HOST
+          value: "0.0.0.0"
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: jwt_secret
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+          initialDelaySeconds: 40
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+          initialDelaySeconds: 20
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+      - name: ghcr-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - discord-store-gateway
+              topologyKey: kubernetes.io/hostname

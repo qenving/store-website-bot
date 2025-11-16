@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %> - Store</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .status-box { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 30px; text-align: center; }
+        .back-link { display: inline-block; margin-bottom: 20px; color: #3498db; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .search-form { margin-bottom: 30px; }
+        .search-form input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 10px; }
+        .search-form button { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; width: 100%; }
+        .search-form button:hover { background: #2980b9; }
+        .status-info { padding: 20px; border-radius: 4px; margin-bottom: 20px; }
+        .status-info.pending { background: #fff3cd; border-left: 4px solid #ffc107; }
+        .status-info.processing { background: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .status-info.completed { background: #d4edda; border-left: 4px solid #28a745; }
+        .status-info.failed { background: #f8d7da; border-left: 4px solid #dc3545; }
+        .status-info.cancelled { background: #e2e3e5; border-left: 4px solid #6c757d; }
+        .info-row { display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .info-row:last-child { border-bottom: none; margin-bottom: 0; }
+        .info-label { font-weight: bold; color: #555; }
+        .info-value { color: #333; }
+        .status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold; text-transform: uppercase; font-size: 12px; }
+        .status-badge.pending { background: #ffc107; }
+        .status-badge.processing { background: #17a2b8; }
+        .status-badge.completed { background: #28a745; }
+        .status-badge.failed { background: #dc3545; }
+        .status-badge.cancelled { background: #6c757d; }
+        .payment-link { display: inline-block; margin-top: 15px; padding: 12px 24px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; }
+        .payment-link:hover { background: #218838; }
+        .error-message { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 4px; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/store/products" class="back-link">← Back to Products</a>
+        <div class="status-box">
+            <h1>📦 <%= title %></h1>
+            
+            <form class="search-form" method="GET" action="/store/status">
+                <input type="text" name="orderId" placeholder="Enter your Order ID" value="<%= typeof orderId !== 'undefined' ? orderId : '' %>" required>
+                <button type="submit">Check Status</button>
+            </form>
+            
+            <% if (typeof error !== 'undefined' && error) { %>
+                <div class="error-message"><%= error %></div>
+            <% } else if (transaction) { %>
+                <div class="status-info <%= transaction.status %>">
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="status-badge <%= transaction.status %>"><%= transaction.status %></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Order ID:</span>
+                        <span class="info-value"><%= transaction.orderId %></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Product ID:</span>
+                        <span class="info-value"><%= transaction.productId %></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Amount:</span>
+                        <span class="info-value"><%= transaction.amount %> <%= transaction.currency %></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Created:</span>
+                        <span class="info-value"><%= new Date(transaction.createdAt).toLocaleString() %></span>
+                    </div>
+                    <% if (transaction.completedAt) { %>
+                        <div class="info-row">
+                            <span class="info-label">Completed:</span>
+                            <span class="info-value"><%= new Date(transaction.completedAt).toLocaleString() %></span>
+                        </div>
+                    <% } %>
+                    
+                    <% if (transaction.paymentLink && transaction.status !== 'completed') { %>
+                        <a href="<%= transaction.paymentLink %>" class="payment-link" target="_blank">💳 Pay Now</a>
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</body>
+</html>

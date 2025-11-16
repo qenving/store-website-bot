@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discord-website
+  namespace: discord-store
+  labels:
+    app: discord-website
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: discord-website
+  template:
+    metadata:
+      labels:
+        app: discord-website
+        tier: frontend
+    spec:
+      containers:
+      - name: website
+        image: discord-store-website:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3003
+          name: http
+        envFrom:
+        - configMapRef:
+            name: discord-store-config
+        - secretRef:
+            name: discord-store-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: website-service
+  namespace: discord-store
+spec:
+  type: LoadBalancer
+  selector:
+    app: discord-website
+  ports:
+  - port: 80
+    targetPort: 3003
+    protocol: TCP

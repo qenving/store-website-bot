@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot-deployment
+  namespace: default
+  labels:
+    app: discord-store-bot
+    tier: application
+    component: bot
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: discord-store-bot
+  template:
+    metadata:
+      labels:
+        app: discord-store-bot
+        tier: application
+        component: bot
+    spec:
+      serviceAccountName: discord-store-sa
+      containers:
+      - name: bot
+        image: ghcr.io/qenving/store-website-bot/bot:latest
+        imagePullPolicy: Always
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DISCORD_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: discord-secret
+              key: token
+        - name: DISCORD_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: discord-secret
+              key: client_id
+        - name: DISCORD_GUILD_ID
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: discord_guild_id
+        - name: CLUSTER_MODE
+          value: "true"
+        - name: CLUSTER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: db_host
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: password
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: db_name
+        - name: API_URL
+          value: "http://api-service:3001"
+        - name: GATEWAY_URL
+          value: "http://gateway-service:3002"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep -v grep | grep "node dist/bot/index.js"
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 20"]
+      terminationGracePeriodSeconds: 60
+      imagePullSecrets:
+      - name: ghcr-secret

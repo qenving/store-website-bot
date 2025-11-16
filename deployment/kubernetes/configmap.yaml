@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: discord-store-config
+  namespace: discord-store
+data:
+  NODE_ENV: "production"
+  API_PORT: "3001"
+  API_HOST: "0.0.0.0"
+  WEBSITE_PORT: "3003"
+  WEBSITE_HOST: "0.0.0.0"
+  SOCKET_PORT: "3002"
+  SOCKET_HOST: "0.0.0.0"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  MYSQL_HOST: "mysql-service"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "discord_store"
+  LOG_LEVEL: "info"
+  SHARD_MODE: "auto"

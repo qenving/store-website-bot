@@ -1,0 +1,211 @@
+replicaCount:
+  api: 3
+  bot: 2
+  worker: 2
+  store: 2
+  gateway: 2
+
+image:
+  registry: ghcr.io
+  repository: qenving/store-website-bot
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+serviceAccount:
+  create: true
+  name: discord-store-sa
+  annotations: {}
+
+environment: production
+
+api:
+  enabled: true
+  replicaCount: 3
+  service:
+    type: ClusterIP
+    port: 3001
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+bot:
+  enabled: true
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 85
+
+worker:
+  enabled: true
+  replicaCount: 2
+  workerType: reconciliation
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+store:
+  enabled: true
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 65
+    targetMemoryUtilizationPercentage: 75
+
+gateway:
+  enabled: true
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 3002
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  persistence:
+    enabled: true
+    storageClass: standard
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  tls:
+    - secretName: discord-store-tls
+      hosts:
+        - store.yourproduction.com
+        - api.yourproduction.com
+        - gateway.yourproduction.com
+  hosts:
+    - host: store.yourproduction.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: store
+    - host: api.yourproduction.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api
+    - host: gateway.yourproduction.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: gateway
+
+config:
+  nodeEnv: production
+  discordGuildId: ""
+  dbHost: ""
+  dbName: discord_store_prod
+
+secrets:
+  create: true
+  discord:
+    token: ""
+    clientId: ""
+  database:
+    username: ""
+    password: ""
+    rootPassword: ""
+  redis:
+    password: ""
+  app:
+    jwtSecret: ""
+    sessionSigningKey: ""
+    encryptionKey: ""
+  payment:
+    stripeSecretKey: ""
+    paypalClientId: ""
+    paypalClientSecret: ""
+    coinbaseApiKey: ""
+    coinbaseWebhookSecret: ""
+
+networkPolicy:
+  enabled: true
+
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+
+blueGreen:
+  enabled: false
+  activeSlot: blue
+
+canary:
+  enabled: false
+  weight: 10

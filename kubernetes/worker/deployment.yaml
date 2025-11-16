@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-deployment
+  namespace: default
+  labels:
+    app: discord-store-worker
+    tier: backend
+    component: worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: discord-store-worker
+  template:
+    metadata:
+      labels:
+        app: discord-store-worker
+        tier: backend
+        component: worker
+    spec:
+      serviceAccountName: discord-store-sa
+      containers:
+      - name: worker
+        image: ghcr.io/qenving/store-website-bot/worker:latest
+        imagePullPolicy: Always
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: WORKER_TYPE
+          value: "reconciliation"
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: db_host
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: password
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: db_name
+        - name: STRIPE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: stripe_secret_key
+        - name: PAYPAL_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: paypal_client_id
+        - name: PAYPAL_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: paypal_client_secret
+        - name: COINBASE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: coinbase_api_key
+        - name: COINBASE_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: coinbase_webhook_secret
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - ps aux | grep -v grep | grep "node dist/worker/index.js"
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+      - name: ghcr-secret
