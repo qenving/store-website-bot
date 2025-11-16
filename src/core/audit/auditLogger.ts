@@ -20,6 +20,8 @@ export enum AuditAction {
   BOT_RESTARTED = 'bot_restarted',
   MAINTENANCE_TOGGLED = 'maintenance_toggled',
   RECONCILIATION_RUN = 'reconciliation_run',
+  RECONCILIATION_MANUAL = 'reconciliation_manual',
+  MISMATCH_RESOLVED = 'mismatch_resolved',
   SETTINGS_UPDATED = 'settings_updated'
 }
 
