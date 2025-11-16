@@ -4,12 +4,14 @@ import { transactionEngine } from '../core/transactions/TransactionEngine';
 import { RealtimeEvent, TransactionEvent, LogEvent } from '../core/transactions/TransactionTypes';
 import { createLogger } from '../core/logging/logger';
 import { getConfig } from '../core/config/config';
+import { MonitoringEvents } from './events/monitoringEvents';
 
 const logger = createLogger({ module: 'SocketServer' });
 
 export class RealtimeServer {
   private io: SocketIOServer | null = null;
   private httpServer: HTTPServer | null = null;
+  private monitoringEvents: MonitoringEvents | null = null;
 
   initialize(httpServer: HTTPServer): void {
     this.httpServer = httpServer;
@@ -23,6 +25,11 @@ export class RealtimeServer {
 
     this.setupEventListeners();
     this.setupSocketHandlers();
+
+    // Initialize monitoring events
+    this.monitoringEvents = new MonitoringEvents(this.io);
+    this.monitoringEvents.setupMonitoringEmitters();
+    logger.info('Monitoring events initialized');
 
     logger.info('Realtime server initialized');
   }

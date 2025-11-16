@@ -5,6 +5,7 @@ import { getConfig } from '../core/config/config';
 import { dal } from '../core/db/dal';
 import { createLogger } from '../core/logging/logger';
 import { adminController } from '../core/admin/AdminController';
+import { uptimeService } from '../core/monitoring/uptimeService';
 
 const logger = createLogger({ module: 'DiscordBot' });
 
@@ -70,6 +71,10 @@ export async function startDiscordBot(): Promise<void> {
 
   client.once('ready', () => {
     adminController.registerBotClient(client);
+
+    // Register bot uptime tracking
+    uptimeService.registerService('bot');
+    logger.info('Bot uptime tracking started');
   });
 
   logger.info('Discord bot started');
