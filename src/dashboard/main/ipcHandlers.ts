@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import { IPCResponse, BotStatus, MaintenanceMode, DashboardConfig } from '../shared/types';
 import { registerMonitoringIpcHandlers } from './monitoringIpcHandlers';
+import { registerSecurityIpcHandlers } from './securityIpcHandlers';
 
 const API_PORT = parseInt(process.env.API_PORT || '3001', 10);
 const API_HOST = process.env.API_HOST || 'localhost';
@@ -134,4 +135,7 @@ export function registerIPCHandlers(): void {
 
   // Register monitoring IPC handlers
   registerMonitoringIpcHandlers();
+
+  // Register security IPC handlers
+  registerSecurityIpcHandlers();
 }

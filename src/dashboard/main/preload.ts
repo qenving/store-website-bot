@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import { IPCResponse, BotStatus, MaintenanceMode, DashboardConfig } from '../shared/types';
 
-const API_EXPOSÉ = {
+const API_EXPOSï¿½ = {
   getBotStatus: (): Promise<IPCResponse<BotStatus>> => {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_BOT_STATUS);
   },
@@ -44,10 +44,50 @@ const API_EXPOSÉ = {
   }
 };
 
-contextBridge.exposeInMainWorld('dashboardAPI', API_EXPOSÉ);
+const SECURITY_API = {
+  getStatus: (): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:getStatus');
+  },
+
+  getTOTPStatus: (userId: string): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:getTOTPStatus', userId);
+  },
+
+  setupTOTP: (userId: string): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:setupTOTP', userId);
+  },
+
+  getActiveSessions: (): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:getActiveSessions');
+  },
+
+  revokeSession: (sessionId: string): Promise<IPCResponse<void>> => {
+    return ipcRenderer.invoke('security:revokeSession', sessionId);
+  },
+
+  getRotationStatus: (): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:getRotationStatus');
+  },
+
+  rotateKey: (keyType: string, data: any): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:rotateKey', keyType, data);
+  },
+
+  getSecurityLogs: (filters: any): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:getSecurityLogs', filters);
+  },
+
+  getMaskedSecrets: (): Promise<IPCResponse<any>> => {
+    return ipcRenderer.invoke('security:getMaskedSecrets');
+  }
+};
+
+contextBridge.exposeInMainWorld('dashboardAPI', API_EXPOSï¿½);
+contextBridge.exposeInMainWorld('securityAPI', SECURITY_API);
 
 declare global {
   interface Window {
-    dashboardAPI: typeof API_EXPOSÉ;
+    dashboardAPI: typeof API_EXPOSï¿½;
+    securityAPI: typeof SECURITY_API;
   }
 }
