@@ -7,6 +7,7 @@ import { dal } from '../core/db/dal';
 import statusRoutes from './routes/status';
 import transactionsRoutes from './routes/transactions';
 import webhookRoutes from './routes/webhook';
+import adminRoutes from './routes/admin';
 
 const logger = createLogger({ module: 'API' });
 
@@ -28,6 +29,7 @@ export async function startAPIServer(): Promise<void> {
 
   app.use('/internal/status', statusRoutes);
   app.use('/internal/transactions', transactionsRoutes);
+  app.use('/internal/admin', adminRoutes);
   app.use('/internal', webhookRoutes);
 
   app.use((err: Error, req: Request, res: Response, next: NextFunction) => {

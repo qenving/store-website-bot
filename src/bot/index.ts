@@ -4,6 +4,7 @@ import * as path from 'path';
 import { getConfig } from '../core/config/config';
 import { dal } from '../core/db/dal';
 import { createLogger } from '../core/logging/logger';
+import { adminController } from '../core/admin/AdminController';
 
 const logger = createLogger({ module: 'DiscordBot' });
 
@@ -66,6 +67,10 @@ export async function startDiscordBot(): Promise<void> {
   await registerCommands(client, config.discord.token, config.discord.clientId, config.discord.guildId);
 
   await client.login(config.discord.token);
+
+  client.once('ready', () => {
+    adminController.registerBotClient(client);
+  });
 
   logger.info('Discord bot started');
 }

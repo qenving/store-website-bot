@@ -155,3 +155,113 @@ Bot, Website, and API are thin layers that call TransactionEngine.
 ## License
 
 MIT
+
+---
+
+## FASE 2: Admin Desktop Dashboard
+
+Enterprise Electron-based desktop dashboard for managing and monitoring the Discord Store Bot.
+
+### Features
+
+- **Real-time Monitoring**
+  - Bot status (online/offline)
+  - Bot uptime tracking
+  - Ping monitoring
+  - Pending transactions count
+  - Connected guilds count
+
+- **Live Logs**
+  - Real-time log streaming via Socket.io
+  - Transaction event monitoring
+  - Filterable log levels (info, warn, error, debug)
+
+- **Bot Control**
+  - Stop bot
+  - Restart bot
+  - Toggle maintenance mode
+  - Local-only access (security enforced)
+
+### Architecture
+
+```
+Dashboard (Electron)
+  ├── Main Process
+  │   ├── IPC Handlers
+  │   ├── Socket.io Client
+  │   └── API Bridge
+  │
+  └── Renderer Process
+      ├── Home Tab (Status & Stats)
+      ├── Logs Tab (Real-time Logs)
+      └── Controls Tab (Bot Management)
+
+Communication:
+- Socket.io → Real-time events from bot/API
+- IPC → Secure communication main ↔ renderer
+- HTTP → Admin API calls (localhost only)
+```
+
+### Starting the Dashboard
+
+```bash
+npm start
+```
+
+This will:
+1. Build TypeScript files
+2. Start Internal API server
+3. Start Socket.io realtime server
+4. Start Discord bot
+5. Launch Electron dashboard
+
+### Dashboard Structure
+
+```
+/src/dashboard
+   /main
+      electronMain.ts    - Electron main process
+      preload.ts         - Preload script (security bridge)
+      ipcHandlers.ts     - IPC request handlers
+   /renderer
+      index.html         - Dashboard UI
+      index.ts           - Renderer entry point
+      /ui
+         home.ts         - Home tab logic
+         logs.ts         - Logs tab logic
+         controls.ts     - Controls tab logic
+   /shared
+      types.ts           - Shared TypeScript types
+      ipcChannels.ts     - IPC channel definitions
+```
+
+### Security
+
+- Dashboard only accessible from localhost
+- No remote access allowed
+- Context isolation enabled
+- Node integration disabled
+- Sandbox enabled
+- All API calls validated for localhost origin
+
+### Admin API Endpoints
+
+- `GET /internal/admin/status` - Get bot status
+- `GET /internal/admin/pending-transactions` - Get pending count
+- `GET /internal/admin/maintenance` - Get maintenance mode status
+- `POST /internal/admin/maintenance/toggle` - Toggle maintenance mode
+- `POST /internal/admin/shutdown` - Shutdown bot
+
+All endpoints restricted to localhost only.
+
+### Real-time Events
+
+Dashboard receives:
+- `bot_status` - Bot status updates (every 5s)
+- `log_message` - Log entries
+- `transaction_created` - New transaction events
+- `transaction_updated` - Transaction updates
+- `transaction_completed` - Completed transactions
+- `transaction_failed` - Failed transactions
+- `maintenance_mode` - Maintenance mode changes
+
