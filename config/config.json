@@ -1,0 +1,8 @@
+{
+    "TOKEN": "Token",
+    "MongoURL": "MongoURL",
+    "CLIENTID": "ClientID",
+    "Owner": "UserID",
+    "Admin": ["UserID", "UserID"],
+    "ChannelDonationLog": "ChannelID"
+}
